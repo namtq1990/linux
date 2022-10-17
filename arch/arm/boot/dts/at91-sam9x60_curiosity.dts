@@ -222,6 +222,11 @@
 	};
 };
 
+&flx5 {
+	atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_SPI>;
+	status = "okay";
+};
+
 &flx6 {
 	atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_TWI>;
 	status = "okay";
@@ -344,6 +349,17 @@
 			atmel,pins =
 				<AT91_PIOA 0 AT91_PERIPH_A AT91_PINCTRL_PULL_UP
 				 AT91_PIOA 1 AT91_PERIPH_A AT91_PINCTRL_PULL_UP>;
+		};
+		pinctrl_lcd: lcd_spi {
+			atmel,pins =
+				// <AT91_PIOA 11 AT91_PERIPH_A AT91_PINCTRL_NONE
+				//  AT91_PIOA 12 AT91_PERIPH_A AT91_PINCTRL_NONE
+				//  AT91_PIOA 13 AT91_PERIPH_A AT91_PINCTRL_NONE
+				//  AT91_PIOA 14 AT91_PERIPH_A AT91_PINCTRL_NONE>;
+				<AT91_PIOA 21 AT91_PERIPH_B AT91_PINCTRL_NONE
+				 AT91_PIOA 22 AT91_PERIPH_B AT91_PINCTRL_NONE
+				 AT91_PIOA 23 AT91_PERIPH_B AT91_PINCTRL_NONE
+				 AT91_PIOA 8 AT91_PERIPH_B AT91_PINCTRL_NONE>;
 		};
 
 		pinctrl_flx6_default: flx6_twi {
@@ -529,4 +545,27 @@
 
 &watchdog {
 	status = "okay";
+};
+
+&spi5 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_lcd>;
+	status = "okay";
+
+	lcd@0 {
+		compatible = "sitronix,st7789v", "sitronix,st7789v_custom";
+		buswidth = <8>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0>;
+		pinctrl-name = "default";
+		spi-max-frequency = <50000000>;
+		write-only;
+		spi-cpol;
+		spi-cpha;
+		reset-gpios= <&pioA 24 0>;
+		dc-gpios= <&pioB 24 0>;
+		debug = <5>;
+		status = "okay";
+	};
 };

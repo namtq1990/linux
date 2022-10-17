@@ -17,7 +17,7 @@
 	aliases {
 		i2c0 = &i2c0;
 		i2c1 = &i2c6;
-		serial1 = &uart5;
+		// serial1 = &uart5;
 	};
 
 	chosen {
@@ -94,7 +94,7 @@
 		compatible = "gpio-leds";
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_gpio_leds>;
-		status = "okay"; /* Conflict with pwm0. */
+		status = "disabled"; /* Conflict with pwm0. */
 
 		red {
 			label = "red";
@@ -237,16 +237,26 @@
 	};
 };
 
+// &flx1 {
+// 	atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_SPI>;
+// 	status = "okay";
+// };
+
+&flx3 {
+	atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_SPI>;
+	status = "okay";
+};
+
 &flx4 {
 	atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_SPI>;
-	status = "disabled";
+	status = "okay";
 
-	spi4: spi@400 {
-		dmas = <0>, <0>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_flx4_default>;
-		status = "disabled";
-	};
+	// spi4: spi@400 {
+	// 	dmas = <0>, <0>;
+	// 	pinctrl-names = "default";
+	// 	pinctrl-0 = <&pinctrl_flx4_default>;
+	// 	status = "okay";
+	// };
 };
 
 &flx5 {
@@ -428,6 +438,25 @@
 				 AT91_PIOA 22 AT91_PERIPH_B AT91_PINCTRL_NONE>;
 		};
 
+		pinctrl_lcd: lcd_spi {
+			atmel,pins =
+				<AT91_PIOA 11 AT91_PERIPH_A AT91_PINCTRL_NONE
+				 AT91_PIOA 12 AT91_PERIPH_A AT91_PINCTRL_NONE
+				 AT91_PIOA 13 AT91_PERIPH_A AT91_PINCTRL_NONE
+				 AT91_PIOA 14 AT91_PERIPH_A AT91_PINCTRL_NONE>;
+				// <AT91_PIOA 21 AT91_PERIPH_A AT91_PINCTRL_NONE
+				//  AT91_PIOA 22 AT91_PERIPH_A AT91_PINCTRL_NONE
+				//  AT91_PIOA 23 AT91_PERIPH_A AT91_PINCTRL_NONE
+				//  AT91_PIOA 8 AT91_PERIPH_A AT91_PINCTRL_NONE>;
+			// atmel,pins =
+			// 	<
+			// 		AT91_PIOA 24 AT91_PERIPH_A AT91_PINCTRL_NONE
+			// 	 	AT91_PIOA 22 AT91_PERIPH_A AT91_PINCTRL_NONE
+			// 	 	AT91_PIOA 23 AT91_PERIPH_A AT91_PINCTRL_NONE
+			// 	 	AT91_PIOA 8 AT91_PERIPH_A AT91_PINCTRL_NONE
+			// 	>;
+		};
+
 		pinctrl_flx6_default: flx6_twi {
 			atmel,pins =
 				<AT91_PIOA 30 AT91_PERIPH_A AT91_PINCTRL_PULL_UP
@@ -511,7 +540,7 @@
 		};
 		pinctrl_sdmmc0_cd: sdmmc0_cd {
 			atmel,pins =
-				<AT91_PIOA 23 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
+				<AT91_PIOB 12 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
 		};
 	};
 
@@ -566,7 +595,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_sdmmc0_default &pinctrl_sdmmc0_cd>;
 	status = "okay";
-	cd-gpios = <&pioA 23 GPIO_ACTIVE_LOW>;
+	cd-gpios = <&pioB 12 GPIO_ACTIVE_LOW>;
 	disable-wp;
 };
 
@@ -582,7 +611,7 @@
 &qspi {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_qspi>;
-	status = "okay"; /* Conflict with i2s. */
+	status = "disabled"; /* Conflict with i2s. */
 
 	flash@0 {
 		#address-cells = <1>;
@@ -677,3 +706,27 @@
 	status = "okay";
 };
 
+&spi4 {
+	pinctrl-names = "default";
+                pinctrl-0 = <&pinctrl_lcd>;
+				dmas = <0>, <0>;
+				status = "okay";
+
+		lcd@0 {
+                    compatible = "sitronix,st7789v";
+		    		buswidth = <8>;
+                    reg = <0>;
+		    		pinctrl-name = "default";
+                    spi-max-frequency = <10000000>;
+                    spi-cpol;
+                    spi-cpha;
+					rotate = <270>;
+					bgr;
+					fps = <50>;
+                    reset-gpios= <&pioA 4 1>;
+                    dc-gpios= <&pioA 3 0>;
+		    		debug = <5>;
+                    status = "okay";
+
+                };
+};

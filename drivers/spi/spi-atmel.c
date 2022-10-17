@@ -1466,7 +1466,7 @@ static int atmel_spi_probe(struct platform_device *pdev)
 	/* the spi->mode bits understood by this driver: */
 	master->use_gpio_descriptors = true;
 	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_CS_HIGH;
-	master->bits_per_word_mask = SPI_BPW_RANGE_MASK(8, 16);
+	master->bits_per_word_mask = SPI_BPW_MASK(8);
 	master->dev.of_node = pdev->dev.of_node;
 	master->bus_num = pdev->id;
 	master->num_chipselect = 4;
