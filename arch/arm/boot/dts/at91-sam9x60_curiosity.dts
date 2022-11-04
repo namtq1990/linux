@@ -50,6 +50,24 @@
 			linux,code = <KEY_PROG1>;
 			wakeup-source;
 		};
+
+		button-left {
+			label = "MENU_LEFT";
+			gpios = <&pioB 20 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_LEFT>;
+		};
+
+		button-right {
+			label = "MENU_RIGHT";
+			gpios = <&pioD 20 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_RIGHT>;
+		};
+
+		button-center {
+			label = "MENU_CENTER";
+			gpios = <&pioB 11 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_DOWN>;
+		};
 	};
 
 	leds {
@@ -377,7 +395,12 @@
 
 	gpio_keys {
 		pinctrl_key_gpio_default: pinctrl_key_gpio {
-			atmel,pins = <AT91_PIOA 29 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
+			atmel,pins = 
+			<
+			AT91_PIOD 20 AT91_PERIPH_GPIO AT91_PINCTRL_NONE
+			AT91_PIOA 29 AT91_PERIPH_GPIO AT91_PINCTRL_NONE
+			AT91_PIOB 20 AT91_PERIPH_GPIO AT91_PINCTRL_NONE
+			AT91_PIOB 11 AT91_PERIPH_GPIO AT91_PINCTRL_NONE>;
 		};
 	};
 
@@ -552,13 +575,14 @@
 	pinctrl-0 = <&pinctrl_lcd>;
 	status = "okay";
 
-	lcd@0 {
-		compatible = "sitronix,st7789v", "sitronix,st7789v_custom";
+	lcd:lcd@0 {
+		compatible = "sitronix,st7789v", "waveshare,rpi-lcd-35";
 		buswidth = <8>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg = <0>;
 		pinctrl-name = "default";
+		rotation = <180>;
 		spi-max-frequency = <50000000>;
 		write-only;
 		spi-cpol;
