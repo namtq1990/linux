@@ -55,18 +55,21 @@
 			label = "MENU_LEFT";
 			gpios = <&pioB 20 GPIO_ACTIVE_LOW>;
 			linux,code = <BTN_TRIGGER_HAPPY1>;
+			wakeup-source;
 		};
 
 		btn_center: button-center {
 			label = "MENU_CENTER";
 			gpios = <&pioB 11 GPIO_ACTIVE_LOW>;
 			linux,code = <BTN_TRIGGER_HAPPY2>;
+			wakeup-source;
 		};
 
 		btn_right: button-right {
 			label = "MENU_RIGHT";
 			gpios = <&pioD 20 GPIO_ACTIVE_LOW>;
 			linux,code = <BTN_TRIGGER_HAPPY3>;
+			wakeup-source;
 		};
 	};
 
@@ -125,6 +128,35 @@
 			status = "okay";
 		};
 	};
+
+	sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "1334 Card";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,bitclock-master = <&i2s>;
+		simple-audio-card,frame-master = <&i2s>;
+		simple-audio-card,cpu {
+				#sound-dai-cells = <0>;
+				sound-dai = <&i2s>;
+			};
+		codec_dai: simple-audio-card,codec {
+			#sound-dai-cells = <0>;
+			sound-dai = <&codec_out>;
+		};
+	};
+
+	codec_out: spdif-transmitter {
+                #address-cells = <0>;
+                #size-cells = <0>;
+                #sound-dai-cells = <0>;
+                /* 
+                    "linux,spdif-dit" is used in generic I2S(transmitter) driver.                     
+                    You can see details "linux,spdif-dit" by bellow command
+                    modinfo snd_soc_spdif_tx
+                */
+                compatible = "linux,spdif-dit";
+                status = "okay";
+            };
 };
 
 &adc {
@@ -286,6 +318,13 @@
 	};
 };
 
+&i2s {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2s_default>;
+	#sound-dai-cells = <0>;
+	status = "okay"; /* Conflict with QSPI. */
+};
+
 &macb0 {
 	phy-mode = "rmii";
 	#address-cells = <1>;
@@ -405,6 +444,19 @@
 			atmel,pins =
 				<AT91_PIOC 0 AT91_PERIPH_C AT91_PINCTRL_NONE
 				 AT91_PIOC 1 AT91_PERIPH_C AT91_PINCTRL_NONE>;
+		};
+	};
+
+	i2s {
+		pinctrl_i2s_default: i2s {
+			atmel,pins =
+				<AT91_PIOB 19 AT91_PERIPH_B AT91_PINCTRL_NONE		/* I2SCK */
+				 AT91_PIOB 20 AT91_PERIPH_B AT91_PINCTRL_NONE		/* I2SWS */
+				 AT91_PIOB 21 AT91_PERIPH_B AT91_PINCTRL_NONE		/* I2SDIN */
+				 AT91_PIOB 22 AT91_PERIPH_B AT91_PINCTRL_NONE		/* I2SDOUT */
+				 AT91_PIOB 23 AT91_PERIPH_B AT91_PINCTRL_NONE		/* I2SMCK */
+				// AT91_PIOC 31 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP		// Audio_EN
+				>;
 		};
 	};
 
