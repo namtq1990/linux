@@ -5927,6 +5927,7 @@ DRM DRIVER FOR ILITEK ILI9806E PANELS
 M:	Luca Ceresoli <luca.ceresoli@bootlin.com>
 S:	Maintained
 F:	Documentation/devicetree/bindings/display/panel/ilitek,ili9806e.yaml
+F:	drivers/gpu/drm/panel/panel-ilitek-ili9806e.c
 
 DRM DRIVER FOR INTEL I810 VIDEO CARDS
 S:	Orphan / Obsolete
