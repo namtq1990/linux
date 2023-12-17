@@ -20,6 +20,10 @@
 #include <linux/usb/hcd.h>
 #include <linux/usb/phy.h>
 #include <linux/usb/of.h>
+#include <linux/of_gpio.h>>
+#include <linux/gpio/consumer.h>
+#include <linux/regulator/consumer.h>
+// #include <linux/errno.h>
 
 #include "ehci.h"
 
@@ -38,6 +42,10 @@ struct atmel_ehci_priv {
 	struct clk *iclk;
 	struct clk *uclk;
 	bool clocked;
+
+	struct gpio_desc* vbus_pin;
+	struct gpio_desc* id_pin;
+	struct regulator* vbus_regulator;
 };
 
 static struct hc_driver __read_mostly ehci_atmel_hc_driver;
@@ -84,6 +92,56 @@ static void atmel_stop_ehci(struct platform_device *pdev)
 
 	dev_dbg(&pdev->dev, "stop\n");
 	atmel_stop_clock(atmel_ehci);
+}
+
+static void ehci_otg_vbus_update(struct atmel_ehci_priv* atmel_ehci) {
+	int ret = 0;
+	int old_vbus = 0;
+
+	if (atmel_ehci->vbus_regulator) {
+		old_vbus = regulator_is_enabled(atmel_ehci->vbus_regulator);
+		if (IS_ERR(old_vbus)) {
+			old_vbus = 0;
+		}
+	}
+
+	if (gpiod_get_value(atmel_ehci->id_pin)) {
+		/* If ID pin is float, power off VBUS */
+		pr_info("ehci_at91_otg_irq Disable VBUS, reg: %px", atmel_ehci->vbus_regulator);
+		// gpiod_set_value(atmel_ehci->vbus_pin, 0);
+		// gpiod_direction_output(atmel_ehci->vbus_pin, 0);
+		if (atmel_ehci->vbus_regulator) {
+			pr_info("atmel_ehci disabling!!!");
+			ret = regulator_disable(atmel_ehci->vbus_regulator);
+		}
+	} else {
+		/* If ID pin is pulled down, power on VBUS */
+		pr_info("ehci_at91_otg_irq Enable VBUS, reg: %px", atmel_ehci->vbus_regulator);
+		// gpiod_set_value(atmel_ehci->vbus_pin, 1);
+		// gpiod_direction_output(atmel_ehci->vbus_pin, 1);
+		if (atmel_ehci->vbus_regulator && old_vbus == 0) {
+			pr_info("atmel_ehci enabling!!!");
+			ret = regulator_enable(atmel_ehci->vbus_regulator);
+		}
+	}
+
+	pr_info("ehci_otg_vbus_update ret: %d", ret);
+}
+
+static irqreturn_t ehci_at91_otg_irq(int irq, void *data)
+{
+	struct platform_device *pdev = data;
+	struct usb_hcd *hcd = dev_get_drvdata(&pdev->dev);
+	struct atmel_ehci_priv *atmel_ehci = hcd_to_atmel_ehci_priv(hcd);
+
+	/* debounce */
+	mdelay(10);
+	ehci_otg_vbus_update(atmel_ehci);
+
+	mdelay(10);
+	dev_info(&pdev->dev, "ehci vbus now is %d", gpiod_get_value(atmel_ehci->vbus_pin));
+
+	return IRQ_HANDLED;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -147,6 +205,32 @@ static int ehci_atmel_drv_probe(struct platform_device *pdev)
 		retval = PTR_ERR(atmel_ehci->uclk);
 		goto fail_request_resource;
 	}
+
+	int vbus_pin = of_get_named_gpio_flags(pdev->dev.of_node, "atmel,vbus-gpio", 0, NULL);
+	int id_pin = of_get_named_gpio_flags(pdev->dev.of_node, "atmel,id-gpio", 0, NULL);
+	atmel_ehci->vbus_pin = gpio_to_desc(vbus_pin);
+	atmel_ehci->id_pin = gpio_to_desc(id_pin);
+	atmel_ehci->vbus_regulator = regulator_get_optional(&pdev->dev, "vbus");
+	if (IS_ERR(atmel_ehci->vbus_regulator)) {
+		retval = PTR_ERR(atmel_ehci->vbus_regulator);
+		pr_info("EHCI Regulator failed: %d", retval);
+		atmel_ehci->vbus_regulator = NULL;
+		if (retval == -EPROBE_DEFER) {
+			goto fail_request_resource;
+		}
+	}
+
+	dev_info(&pdev->dev, "id pin: %d, vbus: %d, regulator: %px", id_pin,
+		 vbus_pin, atmel_ehci->vbus_regulator);
+
+	retval = devm_request_threaded_irq(&pdev->dev, gpiod_to_irq(atmel_ehci->id_pin),
+					NULL,
+			       ehci_at91_otg_irq, IRQF_ONESHOT | IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING, 
+				   "otg_irq", pdev);
+	if (retval) {
+		dev_err(&pdev->dev, "OTG request id irq failed: %d\n", retval);
+	}
+	ehci_otg_vbus_update(atmel_ehci);
 
 	ehci = hcd_to_ehci(hcd);
 	/* registers start at offset 0x0 */

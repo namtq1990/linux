@@ -52,7 +52,8 @@ dtb-$(CONFIG_SOC_AT91SAM9) += \
 	at91sam9x35ek.dtb
 dtb-$(CONFIG_SOC_SAM9X60) += \
 	at91-sam9x60_curiosity.dtb \
-	at91-sam9x60ek.dtb
+	at91-sam9x60ek.dtb \
+	nc-sprd.dtb
 dtb-$(CONFIG_SOC_SAM9X7) += \
 	at91-sam9x75eb.dtb
 dtb-$(CONFIG_SOC_SAM_V7) += \
