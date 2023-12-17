@@ -337,6 +337,7 @@ struct usba_udc {
 	const struct usba_udc_errata *errata;
 	int irq;
 	struct gpio_desc *vbus_pin;
+	struct gpio_desc *id_pin;
 	int num_ep;
 	struct usba_fifo_cfg *fifo_cfg;
 	struct clk *pclk;
@@ -351,6 +352,7 @@ struct usba_udc {
 
 	u16 test_mode;
 	int vbus_prev;
+	int id_prev;
 
 	u32 int_enb_cache;
 
