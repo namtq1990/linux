@@ -23,6 +23,7 @@
 #include <linux/usb/gadget.h>
 #include <linux/delay.h>
 #include <linux/of.h>
+#include <linux/of_gpio.h>>
 #include <linux/irq.h>
 #include <linux/gpio/consumer.h>
 
@@ -385,6 +386,14 @@ static int vbus_is_present(struct usba_udc *udc)
 
 	/* No Vbus detection: Assume always present */
 	return 1;
+}
+
+static int id_is_present(struct usba_udc *udc) 
+{
+	if (udc->id_pin)
+		return !gpiod_get_value(udc->id_pin);
+	
+	return 0;
 }
 
 static void toggle_bias(struct usba_udc *udc, int is_on)
@@ -1948,6 +1957,22 @@ static irqreturn_t usba_vbus_irq_thread(int irq, void *devid)
 
 	/* debounce */
 	udelay(10);
+	int ret;
+
+	ret = id_is_present(udc);
+	if (ret) {
+		dev_info(&udc->pdev->dev, "usba_vbus_irq_thread id_pin change value: %d", ret);
+		udc->id_prev = 0;
+		usba_writel(udc, CTRL, USBA_DISABLE_MASK);
+		return IRQ_HANDLED;
+	}
+	if (udc->id_prev != ret) {
+		dev_info(&udc->pdev->dev, "usba_vbus_irq_thread id_prev != id_pin: %d", udc->id_prev);
+		udc->id_prev = 1;
+		// return IRQ_HANDLED;
+	}
+
+	dev_info(&udc->pdev->dev, "USB Client activated");
 
 	mutex_lock(&udc->vbus_mutex);
 
@@ -2007,7 +2032,7 @@ static int atmel_usba_start(struct usb_gadget *gadget,
 		enable_irq(gpiod_to_irq(udc->vbus_pin));
 
 	/* If Vbus is present, enable the controller and wait for reset */
-	udc->vbus_prev = vbus_is_present(udc);
+	udc->vbus_prev = vbus_is_present(udc) && !id_is_present(udc);
 	if (udc->vbus_prev) {
 		phy_set_mode_ext(udc->phy, PHY_MODE_USB_DEVICE, 1);
 		ret = usba_start(udc);
@@ -2198,10 +2223,19 @@ static struct usba_ep * atmel_udc_of_init(struct platform_device *pdev,
 
 	udc->num_ep = 0;
 
-	udc->vbus_pin = devm_gpiod_get_optional(&pdev->dev, "atmel,vbus",
-						GPIOD_IN);
-	if (IS_ERR(udc->vbus_pin))
-		return ERR_CAST(udc->vbus_pin);
+	// udc->vbus_pin = devm_gpiod_get_optional(&pdev->dev, "atmel,vbus",
+	// 					GPIOD_IN);
+	// udc->id_pin = devm_gpiod_get_optional(&pdev->dev, "atmel,id",
+	// 					GPIOD_IN);
+	dev_info(&pdev->dev, "pre vbus");
+	int vbus_pin = of_get_named_gpio_flags(pdev->dev.of_node, "atmel,vbus-gpio", 0, NULL);
+	dev_info(&pdev->dev, "pre id, vbus: %d", vbus_pin);
+	int id_pin = of_get_named_gpio_flags(pdev->dev.of_node, "atmel,id-gpio", 0, NULL);
+	dev_info(&pdev->dev, "pre id pin: %d, vbus: %d", id_pin, vbus_pin);
+	udc->vbus_pin = gpio_to_desc(vbus_pin);
+	udc->id_pin = gpio_to_desc(id_pin);
+	
+	dev_info(&pdev->dev, "id pin: %d, vbus: %d", desc_to_gpio(udc->id_pin), desc_to_gpio(udc->vbus_pin));
 
 	if (fifo_mode == 0) {
 		udc->num_ep = udc_config->num_ep;

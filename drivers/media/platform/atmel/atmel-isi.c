@@ -1293,12 +1293,13 @@ static int atmel_isi_probe(struct platform_device *pdev)
 	}
 	isi->irq = irq;
 
+	pm_suspend_ignore_children(&pdev->dev, true);
+	pm_runtime_enable(&pdev->dev);
+
 	ret = isi_graph_init(isi);
 	if (ret < 0)
 		goto err_req_irq;
-
-	pm_suspend_ignore_children(&pdev->dev, true);
-	pm_runtime_enable(&pdev->dev);
+		
 	platform_set_drvdata(pdev, isi);
 	return 0;
 
