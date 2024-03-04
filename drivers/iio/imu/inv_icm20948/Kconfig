@@ -1,0 +1,11 @@
+config INV_ICM20948_I2C
+	tristate "InvenSense ICM-20948 I2C driver"
+	depends on I2C
+	select INV_ICM20948
+	select REGMAP_I2C
+	help
+	  This driver supports the InvenSense ICM-20948 motion tracking
+	  devices over I2C.
+
+	  This driver can be built as a module. The module will be called
+	  icm20948.

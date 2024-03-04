@@ -288,35 +288,6 @@
 	};
 };
 
-&flx3 {
-	atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_USART>;
-	status = "okay";
-
-	i2c3: i2c@600 {
-		dmas = <0>, <0>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_flx3_default>;
-		status = "disabled";
-
-		gyro@1e {
-			compatible = "honeywell,hmc5883l";
-			reg = <0x1e>;
-			status = "disabled";
-		};
-
-	};
-
-	uart3: serial@200 {
-		#address-cells = <1>;
-		#size-cells = <0>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_flx3_uart>;
-		status = "okay";
-	};
-};
-
 &flx5 {
 	atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_SPI>;
 	status = "okay";
