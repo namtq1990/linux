@@ -726,7 +726,6 @@
 &usb2 {
 	atmel,vbus-gpio = <&pioA 27 GPIO_ACTIVE_HIGH>;
 	atmel,id-gpio = <&pioC 21 GPIO_ACTIVE_LOW>;
-	vbus-supply = <&usb_otg_vbus>;
 	status = "okay";
 };
 
