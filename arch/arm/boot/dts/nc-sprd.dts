@@ -148,16 +148,13 @@
 		};
 	};
 
-	codec_out: spdif-transmitter {
-                #address-cells = <0>;
-                #size-cells = <0>;
+	codec_out: max98357a {
+                compatible = "maxim,max98357a";
+                // #address-cells = <0>;
+                // #size-cells = <0>;
                 #sound-dai-cells = <0>;
-                /* 
-                    "linux,spdif-dit" is used in generic I2S(transmitter) driver.                     
-                    You can see details "linux,spdif-dit" by bellow command
-                    modinfo snd_soc_spdif_tx
-                */
-                compatible = "linux,spdif-dit";
+                sdmode-gpios = <&pioC 31 GPIO_ACTIVE_HIGH>;
+                sdmode-delay = <5>;
                 status = "okay";
             };
 };
@@ -544,7 +541,7 @@
 				 AT91_PIOB 21 AT91_PERIPH_B AT91_PINCTRL_NONE		/* I2SDIN */
 				 AT91_PIOB 22 AT91_PERIPH_B AT91_PINCTRL_NONE		/* I2SDOUT */
 				 AT91_PIOB 23 AT91_PERIPH_B AT91_PINCTRL_NONE		/* I2SMCK */
-				// AT91_PIOC 31 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP		// Audio_EN
+				 AT91_PIOC 31 AT91_PERIPH_GPIO AT91_PINCTRL_PULL_UP		// Audio_EN
 				>;
 		};
 	};
