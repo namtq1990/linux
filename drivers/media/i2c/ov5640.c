@@ -1156,6 +1156,7 @@ static int ov5640_write_reg(struct ov5640_dev *sensor, u16 reg, u8 val)
 	struct i2c_msg msg;
 	u8 buf[3];
 	int ret;
+	uint32_t retry = 3;
 
 	buf[0] = reg >> 8;
 	buf[1] = reg & 0xff;
@@ -1166,14 +1167,26 @@ static int ov5640_write_reg(struct ov5640_dev *sensor, u16 reg, u8 val)
 	msg.buf = buf;
 	msg.len = sizeof(buf);
 
-	ret = i2c_transfer(client->adapter, &msg, 1);
-	if (ret < 0) {
-		dev_err(&client->dev, "%s: error: reg=%x, val=%x\n",
-			__func__, reg, val);
-		return ret;
+	while (retry > 0)
+	{
+		ret = i2c_transfer(client->adapter, &msg, 1);
+
+		if (ret < 0) {
+			dev_err(&client->dev, "%s: error: reg=%x, val=%x, retry: %x\n",
+				__func__, reg, val,retry);
+		}
+
+		//successfully transfer.
+		else {
+			return 0;
+		}
+		retry --;
+		//waiting sensor stable.
+		msleep(20);
 	}
 
-	return 0;
+	return ret;
+
 }
 
 static int ov5640_read_reg(struct ov5640_dev *sensor, u16 reg, u8 *val)
@@ -1182,6 +1195,7 @@ static int ov5640_read_reg(struct ov5640_dev *sensor, u16 reg, u8 *val)
 	struct i2c_msg msg[2];
 	u8 buf[2];
 	int ret;
+    uint32_t retry = 3;
 
 	buf[0] = reg >> 8;
 	buf[1] = reg & 0xff;
@@ -1196,15 +1210,25 @@ static int ov5640_read_reg(struct ov5640_dev *sensor, u16 reg, u8 *val)
 	msg[1].buf = buf;
 	msg[1].len = 1;
 
-	ret = i2c_transfer(client->adapter, msg, 2);
-	if (ret < 0) {
-		dev_err(&client->dev, "%s: error: reg=%x\n",
-			__func__, reg);
-		return ret;
+	while (retry > 0)
+	{
+		ret = i2c_transfer(client->adapter, msg, 2);
+		if (ret < 0) {
+			dev_err(&client->dev, "%s: error: reg=%x, retry=%x\n",
+				__func__, reg, retry);
+
+		}
+		//successfully transfer.
+		else {
+			*val = buf[0];
+			return 0;
+		}
+		retry --;
+		msleep(20);
+		
 	}
 
-	*val = buf[0];
-	return 0;
+	return ret;
 }
 
 static int ov5640_read_reg16(struct ov5640_dev *sensor, u16 reg, u16 *val)
