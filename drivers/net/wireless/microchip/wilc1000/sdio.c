@@ -261,29 +261,7 @@ static int wilc_sdio_clear_init(struct wilc *wilc)
 	return 0;
 }
 
-static int wilc_sdio_suspend(struct device *dev)
-{
-	struct sdio_func *func = dev_to_sdio_func(dev);
-	struct wilc *wilc = sdio_get_drvdata(func);
-	int ret;
 
-	dev_info(&func->dev, "sdio suspend\n");
-	mutex_lock(&wilc->hif_cs);
-
-	chip_wakeup(wilc, DEV_WIFI);
-
-	if (mutex_is_locked(&wilc->hif_cs))
-		mutex_unlock(&wilc->hif_cs);
-
-	host_sleep_notify(wilc, DEV_WIFI);
-	chip_allow_sleep(wilc, DEV_WIFI);
-
-	mutex_lock(&wilc->hif_cs);
-
-	ret = wilc_sdio_reset(wilc);
-
-	return 0;
-}
 
 static int wilc_sdio_enable_interrupt(struct wilc *dev)
 {
@@ -1076,6 +1054,31 @@ static const struct wilc_hif_func wilc_hif_sdio = {
 	.hif_clear_init = wilc_sdio_clear_init,
 };
 
+static int wilc_sdio_suspend(struct device *dev)
+{
+	struct sdio_func *func = dev_to_sdio_func(dev);
+	struct wilc *wilc = sdio_get_drvdata(func);
+	int ret;
+
+	dev_info(&func->dev, "sdio suspend\n");
+	mutex_lock(&wilc->hif_cs);
+
+	chip_wakeup(wilc, DEV_WIFI);
+
+	if (mutex_is_locked(&wilc->hif_cs))
+		mutex_unlock(&wilc->hif_cs);
+
+	host_sleep_notify(wilc, DEV_WIFI);
+	wilc_sdio_disable_interrupt(wilc);
+	chip_allow_sleep(wilc, DEV_WIFI);
+
+	mutex_lock(&wilc->hif_cs);
+
+	ret = wilc_sdio_reset(wilc);
+
+	return 0;
+}
+
 static int wilc_sdio_resume(struct device *dev)
 {
 	struct sdio_func *func = dev_to_sdio_func(dev);
@@ -1084,6 +1087,8 @@ static int wilc_sdio_resume(struct device *dev)
 	dev_info(&func->dev, "sdio resume\n");
 	chip_wakeup(wilc, DEV_WIFI);
 	wilc_sdio_init(wilc, true);
+
+	wilc_sdio_enable_interrupt(wilc);
 
 	if (mutex_is_locked(&wilc->hif_cs))
 		mutex_unlock(&wilc->hif_cs);
