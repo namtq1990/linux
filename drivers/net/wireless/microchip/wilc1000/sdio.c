@@ -13,6 +13,11 @@
 #include <linux/pm_runtime.h>
 #include <linux/mmc/sdio.h>
 #include <linux/of_irq.h>
+#include <linux/of_device.h>
+#include <linux/of_platform.h>
+#include <linux/gpio/consumer.h>
+#include <linux/of_gpio.h>
+
 
 #include "netdev.h"
 #include "cfg80211.h"
@@ -141,6 +146,7 @@ static int wilc_sdio_probe(struct sdio_func *func,
 	static bool init_power;
 	struct wilc_sdio *sdio_priv;
 	struct device_node *np;
+	struct device_node *np_wilc;
 	int irq_num;
 
 	sdio_priv = kzalloc(sizeof(*sdio_priv), GFP_KERNEL);
@@ -162,10 +168,38 @@ static int wilc_sdio_probe(struct sdio_func *func,
 	wilc->dev = &func->dev;
 	wilc->dt_dev = &func->card->dev;
 	sdio_priv->wl = wilc;
+	np_wilc = of_parse_phandle(func->card->host->parent->of_node, "mmc-wilc",
+			      0);
+	if (np_wilc && of_device_is_available(np_wilc)) {
+		dev_info(&func->dev, "Found child node: mmc-wilc\n");
+	} else {
+		dev_err(&func->dev, "Coundn't find child node: mmc-wilc\n");
+		ret = -ENODEV;
+	}
 
-	irq_num = of_irq_get(func->card->dev.of_node, 0);
-	if (irq_num > 0)
-		wilc->dev_irq_num = irq_num;
+	irq_num = of_get_named_gpio(np_wilc,
+					       "irq-gpios", 0);
+
+	if (irq_num <= 0) {
+		dev_warn(wilc->dev, "failed to get IRQ GPIO, load value: %d\r\n",irq_num);
+		ret = -ENODEV;
+	}
+	else {
+		dev_info(wilc->dev, "get IRQ GPIO, load value: %d\r\n",irq_num);
+	}
+	if ((gpio_request(irq_num, "WILC_INTR") == 0) &&
+	    (gpio_direction_input(irq_num) == 0)) {
+		wilc->gpio_irq = irq_num;
+		wilc->dev_irq_num = gpio_to_irq(irq_num);
+		//free node after use
+		of_node_put(np_wilc);
+	} else {
+		dev_err(wilc->dev, "could not obtain gpio for WILC_INTR\n");
+		irq_num = 0;
+		ret = -ENODEV;
+		goto free;
+	}
+	dev_info(&func->dev,"wilc_sdio_probe: dev_irq_num = %d\n", wilc->dev_irq_num);
 
 	wilc->rtc_clk = devm_clk_get_optional(&func->card->dev, "rtc");
 	if (IS_ERR(wilc->rtc_clk)) {
@@ -209,6 +243,7 @@ dispose_irq:
 	irq_dispose_mapping(wilc->dev_irq_num);
 	wilc_netdev_cleanup(wilc);
 free:
+	gpio_free(wilc->gpio_irq);
 	kfree(sdio_priv);
 	return ret;
 }
@@ -218,6 +253,7 @@ static void wilc_sdio_remove(struct sdio_func *func)
 	struct wilc *wilc = sdio_get_drvdata(func);
 	struct wilc_sdio *sdio_priv = wilc->bus_data;
 
+	gpio_free(wilc->gpio_irq);
 	clk_disable_unprepare(wilc->rtc_clk);
 	wilc_netdev_cleanup(wilc);
 	kfree(sdio_priv);
