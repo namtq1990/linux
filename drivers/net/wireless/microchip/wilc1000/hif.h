@@ -31,7 +31,6 @@ enum {
 	WILC_GET_CFG
 };
 
-#define WILC_MAX_ASSOC_RESP_FRAME_SIZE   256
 extern uint32_t cfg_packet_timeout;
 
 struct rf_info {
