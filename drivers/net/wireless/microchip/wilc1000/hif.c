@@ -9,7 +9,7 @@
 #define WILC_HIF_SCAN_TIMEOUT_MS                5000
 #define WILC_HIF_CONNECT_TIMEOUT_MS             9500
 
-#define WILC_HIF_PRE_PERIODIC_GET_RSSI_MS		9500
+#define WILC_HIF_PRE_PERIODIC_GET_RSSI_MS		59500
 #define WILC_HIF_PRE_PERIODIC_GET_RSSI			msecs_to_jiffies(WILC_HIF_PRE_PERIODIC_GET_RSSI_MS)
 
 // Get RSSI every 10 seconds
@@ -1858,7 +1858,7 @@ int wilc_init(struct net_device *dev, struct host_if_drv **hif_drv_handler)
 	// so we need to turn off the power save mode before getting the rssi value
 	// This is a workaround solution, we need to find a better solution and this only apply
 	// during connected state
-	// periodical rssi time: 9.5s (500ms before the periodic rssi time)
+	// periodical rssi time: 500ms before the periodic rssi time
 	timer_setup(&vif->pre_periodic_rssi, pre_get_periodic_rssi, 0);
 	timer_setup(&vif->periodic_rssi, get_periodic_rssi, 0);
 	mod_timer(&vif->pre_periodic_rssi, jiffies + WILC_HIF_PRE_PERIODIC_GET_RSSI);
