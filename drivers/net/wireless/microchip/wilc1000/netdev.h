@@ -211,6 +211,8 @@ struct wilc_vif {
 	struct net_device *ndev;
 
 	struct timer_list periodic_rssi;
+	// Fixme: Manually wakeup the chip
+	struct timer_list pre_periodic_rssi;
 	struct rf_info periodic_stat;
 	struct tcp_ack_filter ack_filter;
 	bool connecting;
