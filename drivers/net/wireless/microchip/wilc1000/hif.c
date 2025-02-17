@@ -9,6 +9,13 @@
 #define WILC_HIF_SCAN_TIMEOUT_MS                5000
 #define WILC_HIF_CONNECT_TIMEOUT_MS             9500
 
+#define WILC_HIF_PRE_PERIODIC_GET_RSSI_MS		59500
+#define WILC_HIF_PRE_PERIODIC_GET_RSSI			msecs_to_jiffies(WILC_HIF_PRE_PERIODIC_GET_RSSI_MS)
+
+// Get RSSI every 10 seconds
+#define WILC_HIF_PERIODIC_GET_RSSI_MS			(WILC_HIF_PRE_PERIODIC_GET_RSSI_MS + 500)
+#define WILC_HIF_PERIODIC_GET_RSSI				msecs_to_jiffies(WILC_HIF_PERIODIC_GET_RSSI_MS)
+
 #define WILC_FALSE_FRMWR_CHANNEL		100
 struct send_buffered_eap {
 	void (*deliver_to_stack)(struct wilc_vif *vif, u8 *buff, u32 size,
@@ -1796,6 +1803,22 @@ int wilc_hif_set_cfg(struct wilc_vif *vif, struct cfg_param_attr *param)
 	return wilc_send_config_pkt(vif, WILC_SET_CFG, wid_list, i);
 }
 
+static void pre_get_periodic_rssi(struct timer_list *t)
+{
+	struct wilc_vif *vif = from_timer(vif, t, pre_periodic_rssi);
+
+	if (!vif->hif_drv) {
+		netdev_err(vif->ndev, "%s: hif driver is NULL", __func__);
+		return;
+	}
+
+	if (vif->hif_drv->hif_state == HOST_IF_CONNECTED) {
+		// Power save mode should be turned off here
+		wilc_set_power_mgmt(vif, 0, -1);
+	}
+	mod_timer(&vif->pre_periodic_rssi, jiffies + WILC_HIF_PRE_PERIODIC_GET_RSSI);
+}
+
 static void get_periodic_rssi(struct timer_list *t)
 {
 	struct wilc_vif *vif = from_timer(vif, t, periodic_rssi);
@@ -1805,10 +1828,13 @@ static void get_periodic_rssi(struct timer_list *t)
 		return;
 	}
 
-	if (vif->hif_drv->hif_state == HOST_IF_CONNECTED)
+	if (vif->hif_drv->hif_state == HOST_IF_CONNECTED) {
 		wilc_get_stats_async(vif, &vif->periodic_stat);
-
-	mod_timer(&vif->periodic_rssi, jiffies + msecs_to_jiffies(5000));
+		//Compeletly get rssid, enter power save mode
+		wilc_set_power_mgmt(vif, 1, -1);
+	}
+	//TODO: should increase the timer value? 5000ms --> 10000ms?
+	mod_timer(&vif->periodic_rssi, jiffies + WILC_HIF_PERIODIC_GET_RSSI);
 }
 
 int wilc_init(struct net_device *dev, struct host_if_drv **hif_drv_handler)
@@ -1827,8 +1853,16 @@ int wilc_init(struct net_device *dev, struct host_if_drv **hif_drv_handler)
 	timer_setup(&hif_drv->scan_timer, timer_scan_cb, 0);
 	timer_setup(&hif_drv->connect_timer, timer_connect_cb, 0);
 	timer_setup(&hif_drv->remain_on_ch_timer, listen_timer_cb, 0);
+	// Fixme: to stablize the connection, we need to get the rssi value periodically
+	// but in power_save sometimes it's fail to get the rssi value,
+	// so we need to turn off the power save mode before getting the rssi value
+	// This is a workaround solution, we need to find a better solution and this only apply
+	// during connected state
+	// periodical rssi time: 500ms before the periodic rssi time
+	timer_setup(&vif->pre_periodic_rssi, pre_get_periodic_rssi, 0);
 	timer_setup(&vif->periodic_rssi, get_periodic_rssi, 0);
-	mod_timer(&vif->periodic_rssi, jiffies + msecs_to_jiffies(5000));
+	mod_timer(&vif->pre_periodic_rssi, jiffies + WILC_HIF_PRE_PERIODIC_GET_RSSI);
+	mod_timer(&vif->periodic_rssi, jiffies + WILC_HIF_PERIODIC_GET_RSSI);
 
 	hif_drv->hif_state = HOST_IF_IDLE;
 
@@ -1851,6 +1885,7 @@ int wilc_deinit(struct wilc_vif *vif)
 
 	del_timer_sync(&hif_drv->scan_timer);
 	del_timer_sync(&hif_drv->connect_timer);
+	del_timer_sync(&vif->pre_periodic_rssi);
 	del_timer_sync(&vif->periodic_rssi);
 	del_timer_sync(&hif_drv->remain_on_ch_timer);
 

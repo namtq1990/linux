@@ -1094,7 +1094,11 @@ static int wilc_mac_close(struct net_device *ndev)
 		PRINT_ER(ndev, "MAC close called with no opened interfaces\n");
 		return 0;
 	}
-
+	// Improve scan time by disable power_save mode	
+	if (wilc_set_power_mgmt(vif, 0, -1))
+	{
+		PRINT_ER(ndev, "Failed to disable power_save mode\n");
+	}
 	if (vif->ndev) {
 		netif_stop_queue(vif->ndev);
 
