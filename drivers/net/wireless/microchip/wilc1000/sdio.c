@@ -197,7 +197,7 @@ static int wilc_sdio_probe(struct sdio_func *func,
 		dev_err(wilc->dev, "could not obtain gpio for WILC_INTR\n");
 		irq_num = 0;
 		ret = -ENODEV;
-		goto free;
+		goto free_gpio;
 	}
 	dev_info(&func->dev,"wilc_sdio_probe: dev_irq_num = %d\n", wilc->dev_irq_num);
 
@@ -242,8 +242,9 @@ disable_rtc_clk:
 dispose_irq:
 	irq_dispose_mapping(wilc->dev_irq_num);
 	wilc_netdev_cleanup(wilc);
-free:
+free_gpio:
 	gpio_free(wilc->gpio_irq);
+free:
 	kfree(sdio_priv);
 	return ret;
 }
@@ -253,9 +254,9 @@ static void wilc_sdio_remove(struct sdio_func *func)
 	struct wilc *wilc = sdio_get_drvdata(func);
 	struct wilc_sdio *sdio_priv = wilc->bus_data;
 
-	gpio_free(wilc->gpio_irq);
 	clk_disable_unprepare(wilc->rtc_clk);
 	wilc_netdev_cleanup(wilc);
+	gpio_free(wilc->gpio_irq);
 	kfree(sdio_priv);
 	wilc_bt_deinit();
 }
