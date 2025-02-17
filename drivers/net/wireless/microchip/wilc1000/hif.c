@@ -9,6 +9,9 @@
 #define WILC_HIF_SCAN_TIMEOUT_MS                5000
 #define WILC_HIF_CONNECT_TIMEOUT_MS             9500
 
+#define WILC_HIF_PERIODIC_GET_RSSI_MS		10000
+#define WILC_HIF_PERIODIC_GET_RSSI		msecs_to_jiffies(10000)
+
 #define WILC_FALSE_FRMWR_CHANNEL		100
 struct send_buffered_eap {
 	void (*deliver_to_stack)(struct wilc_vif *vif, u8 *buff, u32 size,
@@ -1805,10 +1808,14 @@ static void get_periodic_rssi(struct timer_list *t)
 		return;
 	}
 
-	if (vif->hif_drv->hif_state == HOST_IF_CONNECTED)
+	if (vif->hif_drv->hif_state == HOST_IF_CONNECTED) {
+		//TODO: Should tunr on/off power save mode here?
+		wilc_set_power_mgmt(vif, 0, -1);
 		wilc_get_stats_async(vif, &vif->periodic_stat);
-
-	mod_timer(&vif->periodic_rssi, jiffies + msecs_to_jiffies(5000));
+		wilc_set_power_mgmt(vif, 1, -1);
+	}
+	//TODO: should increase the timer value? 5000ms --> 10000ms?
+	mod_timer(&vif->periodic_rssi, jiffies + WILC_HIF_PERIODIC_GET_RSSI);
 }
 
 int wilc_init(struct net_device *dev, struct host_if_drv **hif_drv_handler)
@@ -1828,7 +1835,7 @@ int wilc_init(struct net_device *dev, struct host_if_drv **hif_drv_handler)
 	timer_setup(&hif_drv->connect_timer, timer_connect_cb, 0);
 	timer_setup(&hif_drv->remain_on_ch_timer, listen_timer_cb, 0);
 	timer_setup(&vif->periodic_rssi, get_periodic_rssi, 0);
-	mod_timer(&vif->periodic_rssi, jiffies + msecs_to_jiffies(5000));
+	mod_timer(&vif->periodic_rssi, jiffies + WILC_HIF_PERIODIC_GET_RSSI);
 
 	hif_drv->hif_state = HOST_IF_IDLE;
 
