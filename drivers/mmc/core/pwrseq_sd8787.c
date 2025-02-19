@@ -28,10 +28,64 @@ struct mmc_pwrseq_sd8787 {
 	struct mmc_pwrseq pwrseq;
 	struct gpio_desc *reset_gpio;
 	struct gpio_desc *pwrdn_gpio;
-	u32 reset_pwrdwn_delay_ms;
+    struct mutex gpio_lock; // Protect access to GPIOs
+	// FIXME: Add HH300 do not support suspend/resume, so add sysfs control to 
+	// turn on/off the power. But this driver is also used by SPRD so add a flag
+	// to dertermine who controls the power
+	bool use_sysfs_control;
 };
 
+static struct mmc_pwrseq_sd8787 *global_pwrseq; // For sysfs access
+
+
 #define to_pwrseq_sd8787(p) container_of(p, struct mmc_pwrseq_sd8787, pwrseq)
+
+
+// Sysfs attribute to manually control GPIOs
+static ssize_t power_ctl_store(struct device *dev, struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct mmc_pwrseq_sd8787 *pwrseq = global_pwrseq;
+	bool power_on;
+
+	if (kstrtobool(buf, &power_on))
+		return -EINVAL;
+
+	mutex_lock(&pwrseq->gpio_lock);
+	pwrseq->use_sysfs_control = true; // Enable sysfs control
+	if (power_on) {
+		// Power on: De-assert reset, assert powerdown
+		gpiod_set_value_cansleep(pwrseq->pwrdn_gpio, 1);
+		msleep(5);
+		gpiod_set_value_cansleep(pwrseq->reset_gpio, 1);
+	} else {
+		// Power off: De-assert powerdown, assert reset
+		gpiod_set_value_cansleep(pwrseq->reset_gpio, 0);
+		gpiod_set_value_cansleep(pwrseq->pwrdn_gpio, 0);
+	}
+
+	mutex_unlock(&pwrseq->gpio_lock);
+
+	return count;
+}
+
+static ssize_t power_ctl_show(struct device *dev, struct device_attribute *attr,
+			      char *buf)
+{
+	struct mmc_pwrseq_sd8787 *pwrseq = global_pwrseq;
+	int reset_state, powerdown_state;
+
+	mutex_lock(&pwrseq->gpio_lock);
+
+	reset_state = gpiod_get_value_cansleep(pwrseq->reset_gpio);
+	powerdown_state = gpiod_get_value_cansleep(pwrseq->pwrdn_gpio);
+
+	mutex_unlock(&pwrseq->gpio_lock);
+
+	return sprintf(buf, "reset: %d, powerdown: %d\n", reset_state, powerdown_state);
+}
+
+static DEVICE_ATTR_RW(power_ctl);
 
 static void mmc_pwrseq_sd8787_pre_power_on(struct mmc_host *host)
 {
@@ -39,7 +93,7 @@ static void mmc_pwrseq_sd8787_pre_power_on(struct mmc_host *host)
 
 	gpiod_set_value_cansleep(pwrseq->reset_gpio, 1);
 
-	msleep(pwrseq->reset_pwrdwn_delay_ms);
+	msleep(300);
 	gpiod_set_value_cansleep(pwrseq->pwrdn_gpio, 1);
 }
 
@@ -50,18 +104,44 @@ static void mmc_pwrseq_sd8787_power_off(struct mmc_host *host)
 	gpiod_set_value_cansleep(pwrseq->pwrdn_gpio, 0);
 	gpiod_set_value_cansleep(pwrseq->reset_gpio, 0);
 }
+static void mmc_pwrseq_wilc1000_pre_power_on(struct mmc_host *host)
+{
+	struct mmc_pwrseq_sd8787 *pwrseq = to_pwrseq_sd8787(host->pwrseq);
 
+    	mutex_lock(&pwrseq->gpio_lock);
+	/* The pwrdn_gpio is really CHIP_EN, reset_gpio is RESETN */
+	 if (!pwrseq->use_sysfs_control) { // Only control power if not using sysfs
+		gpiod_set_value_cansleep(pwrseq->pwrdn_gpio, 1);
+		msleep(5);
+		gpiod_set_value_cansleep(pwrseq->reset_gpio, 1);
+	}
+	mutex_unlock(&pwrseq->gpio_lock);
+
+}\
+static void mmc_pwrseq_wilc1000_power_off(struct mmc_host *host)
+{
+	struct mmc_pwrseq_sd8787 *pwrseq = to_pwrseq_sd8787(host->pwrseq);
+
+    mutex_lock(&pwrseq->gpio_lock);
+	if (!pwrseq->use_sysfs_control) { // Only control power if not using sysfs
+		gpiod_set_value_cansleep(pwrseq->reset_gpio, 0);
+		gpiod_set_value_cansleep(pwrseq->pwrdn_gpio, 0);
+	}
+	
+    mutex_unlock(&pwrseq->gpio_lock);
+}
+static const struct mmc_pwrseq_ops mmc_pwrseq_wilc1000_ops = {
+	.pre_power_on = mmc_pwrseq_wilc1000_pre_power_on,
+	.power_off = mmc_pwrseq_wilc1000_power_off,
+};
 static const struct mmc_pwrseq_ops mmc_pwrseq_sd8787_ops = {
 	.pre_power_on = mmc_pwrseq_sd8787_pre_power_on,
 	.power_off = mmc_pwrseq_sd8787_power_off,
 };
 
-static const u32 sd8787_delay_ms = 300;
-static const u32 wilc1000_delay_ms = 5;
-
 static const struct of_device_id mmc_pwrseq_sd8787_of_match[] = {
-	{ .compatible = "mmc-pwrseq-sd8787", .data = &sd8787_delay_ms },
-	{ .compatible = "mmc-pwrseq-wilc1000", .data = &wilc1000_delay_ms },
+	{ .compatible = "mmc-pwrseq-sd8787", .data = &mmc_pwrseq_sd8787_ops },
+	{ .compatible = "mmc-pwrseq-wilc1000", .data = &mmc_pwrseq_wilc1000_ops },
 	{/* sentinel */},
 };
 MODULE_DEVICE_TABLE(of, mmc_pwrseq_sd8787_of_match);
@@ -71,13 +151,13 @@ static int mmc_pwrseq_sd8787_probe(struct platform_device *pdev)
 	struct mmc_pwrseq_sd8787 *pwrseq;
 	struct device *dev = &pdev->dev;
 	const struct of_device_id *match;
+    	int ret;
 
 	pwrseq = devm_kzalloc(dev, sizeof(*pwrseq), GFP_KERNEL);
 	if (!pwrseq)
 		return -ENOMEM;
 
 	match = of_match_node(mmc_pwrseq_sd8787_of_match, pdev->dev.of_node);
-	pwrseq->reset_pwrdwn_delay_ms = *(u32 *)match->data;
 
 	pwrseq->pwrdn_gpio = devm_gpiod_get(dev, "powerdown", GPIOD_OUT_LOW);
 	if (IS_ERR(pwrseq->pwrdn_gpio))
@@ -88,17 +168,30 @@ static int mmc_pwrseq_sd8787_probe(struct platform_device *pdev)
 		return PTR_ERR(pwrseq->reset_gpio);
 
 	pwrseq->pwrseq.dev = dev;
-	pwrseq->pwrseq.ops = &mmc_pwrseq_sd8787_ops;
+	pwrseq->pwrseq.ops = match->data;
 	pwrseq->pwrseq.owner = THIS_MODULE;
+	pwrseq->use_sysfs_control = false; // Default to MMC control
+
 	platform_set_drvdata(pdev, pwrseq);
 
+	// Register sysfs attribute
+	global_pwrseq = pwrseq; // Set global reference for sysfs
+	
+	ret = device_create_file(dev, &dev_attr_power_ctl);
+	if (ret) {
+		dev_err(dev, "sysfs attribute\n");
+		return ret;
+	}
+	dev_info(dev, "Sysfs attribute /sys/devices/platform/%s/power_ctl created\n", dev_name(&pdev->dev));
+	
 	return mmc_pwrseq_register(&pwrseq->pwrseq);
 }
 
 static int mmc_pwrseq_sd8787_remove(struct platform_device *pdev)
 {
 	struct mmc_pwrseq_sd8787 *pwrseq = platform_get_drvdata(pdev);
-
+	// Remove sysfs attribute
+	device_remove_file(&pdev->dev, &dev_attr_power_ctl);
 	mmc_pwrseq_unregister(&pwrseq->pwrseq);
 
 	return 0;
