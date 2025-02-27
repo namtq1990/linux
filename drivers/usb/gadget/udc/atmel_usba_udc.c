@@ -1954,25 +1954,27 @@ static irqreturn_t usba_vbus_irq_thread(int irq, void *devid)
 
 	/* debounce */
 	udelay(10);
-	int ret;
 
-	ret = id_is_present(udc);
-	if (ret) {
-		dev_info(&udc->pdev->dev, "usba_vbus_irq_thread id_pin change value: %d", ret);
+	// pull_down (1 -> 0): conf to host.
+	dev_info(&udc->pdev->dev, "usba_vbus_irq_thread vbus_pin_cur: %d, vbus_pre:%d\n", gpiod_get_value(udc->vbus_pin),udc->vbus_prev);
+
+	if (!gpiod_get_value(udc->id_pin)) {
+		dev_info(&udc->pdev->dev, "USB Client deactivated");
 		udc->id_prev = 0;
 		usba_writel(udc, CTRL, USBA_DISABLE_MASK);
 		return IRQ_HANDLED;
 	}
-	if (udc->id_prev != ret) {
-		dev_info(&udc->pdev->dev, "usba_vbus_irq_thread id_prev != id_pin: %d", udc->id_prev);
+	// Pull up 0: --> 1 conf as usb device
+	// Case: id_prev = 0, gpiod_get_value(udc->id_pin) = 1?
+	if (udc->id_prev != gpiod_get_value(udc->id_pin)) {
 		udc->id_prev = 1;
+		//FIXME: Should return?
 		// return IRQ_HANDLED;
 	}
-
 	dev_info(&udc->pdev->dev, "USB Client activated");
 
 	mutex_lock(&udc->vbus_mutex);
-
+	/* Only when VBUS is powered on and ID pin is float, configure USB to device */
 	vbus = vbus_is_present(udc);
 	if (vbus != udc->vbus_prev) {
 		if (vbus) {
@@ -2029,7 +2031,7 @@ static int atmel_usba_start(struct usb_gadget *gadget,
 		enable_irq(gpiod_to_irq(udc->vbus_pin));
 
 	/* If Vbus is present, enable the controller and wait for reset */
-	udc->vbus_prev = vbus_is_present(udc) && !id_is_present(udc);
+	udc->vbus_prev = (vbus_is_present(udc) && gpiod_get_value(udc->id_pin));
 	if (udc->vbus_prev) {
 		phy_set_mode_ext(udc->phy, PHY_MODE_USB_DEVICE, 1);
 		ret = usba_start(udc);

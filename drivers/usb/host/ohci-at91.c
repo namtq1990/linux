@@ -29,7 +29,9 @@
 #include <linux/usb/hcd.h>
 #include <soc/at91/atmel-sfr.h>
 #include <soc/at91/sama7-sfr.h>
-
+#include <linux/of_gpio.h>
+#include <linux/gpio/consumer.h>
+#include <linux/regulator/consumer.h>
 #include "ohci.h"
 
 #define valid_port(index)	((index) >= 0 && (index) < AT91_MAX_USBH_PORTS)
@@ -49,6 +51,7 @@ static const struct of_device_id at91_ohci_dt_ids[];
 #define AT91_MAX_USBH_PORTS	3
 struct at91_usbh_data {
 	struct gpio_desc *vbus_pin[AT91_MAX_USBH_PORTS];
+	struct gpio_desc *id_pin;
 	struct gpio_desc *overcurrent_pin[AT91_MAX_USBH_PORTS];
 	u8 ports;				/* number of ports on root hub */
 	u8 overcurrent_supported;
@@ -568,6 +571,27 @@ static const struct of_device_id at91_ohci_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, at91_ohci_dt_ids);
 
 /*-------------------------------------------------------------------------*/
+static irqreturn_t ohci_at91_otg_irq(int irq, void *data)
+{
+	struct platform_device *pdev = data;
+	struct at91_usbh_data	*pdata;
+
+	pdata = dev_get_platdata(&pdev->dev);
+	dev_info(&pdev->dev, "****ohci_at91_otg_irq\n");
+
+	/* debounce */
+	mdelay(10);
+	if (gpiod_get_value(pdata->id_pin)) {
+		/* If ID pin is float, power off VBUS */
+		// gpiod_direction_output(pdata->vbus_pin[0], 0);
+		dev_info(&pdev->dev, "****If ID pin is float, power off VBUS\n");
+	} else {
+		/* If ID pin is pulled down, power on VBUS */
+		dev_info(&pdev->dev, "****If ID pin is pulled down, power on VBUS\n");
+		// gpiod_direction_output(pdata->vbus_pin[0], 1);
+	}
+	return IRQ_HANDLED;
+}
 
 static int ohci_hcd_at91_drv_probe(struct platform_device *pdev)
 {
@@ -608,7 +632,20 @@ static int ohci_hcd_at91_drv_probe(struct platform_device *pdev)
 			continue;
 		}
 	}
+	int id_pin = of_get_named_gpio_flags(pdev->dev.of_node, "atmel,id-gpio", 0, NULL);
+	dev_info(&pdev->dev, "ohci_hcd_at91_drv_probe: atmel,id-gpio: %d", id_pin);
 
+	pdata->id_pin = gpio_to_desc(id_pin);
+	if (IS_ERR(pdata->id_pin)) {
+		err = PTR_ERR(pdata->id_pin);
+		dev_err(&pdev->dev, "unable to claim gpio \"id\": %d\n", err);
+	}
+	ret = devm_request_irq(&pdev->dev, gpiod_to_irq(pdata->id_pin), ohci_at91_otg_irq, 0, "otg_irq", pdev);
+
+	if (!gpiod_get_value(pdata->id_pin)) {
+		/* If ID pin is pulled down, power on VBUS */
+		gpiod_direction_output(pdata->vbus_pin[0], 1);
+	}
 	at91_for_each_port(i) {
 		if (i >= pdata->ports)
 			break;
