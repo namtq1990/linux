@@ -577,18 +577,18 @@ static irqreturn_t ohci_at91_otg_irq(int irq, void *data)
 	struct at91_usbh_data	*pdata;
 
 	pdata = dev_get_platdata(&pdev->dev);
-	dev_info(&pdev->dev, "****ohci_at91_otg_irq\n");
+	dev_info(&pdev->dev, "%s\n", __func__);
 
 	/* debounce */
 	mdelay(10);
+	// With HH300, Vbus voltage is controlled by STM32MCU.
 	if (gpiod_get_value(pdata->id_pin)) {
 		/* If ID pin is float, power off VBUS */
-		// gpiod_direction_output(pdata->vbus_pin[0], 0);
-		dev_info(&pdev->dev, "****If ID pin is float, power off VBUS\n");
+		dev_info(&pdev->dev, "ID pin is float, power off VBUS\n");
 	} else {
 		/* If ID pin is pulled down, power on VBUS */
-		dev_info(&pdev->dev, "****If ID pin is pulled down, power on VBUS\n");
-		// gpiod_direction_output(pdata->vbus_pin[0], 1);
+		dev_info(&pdev->dev, "ID pin is pulled down, power on VBUS\n");
+
 	}
 	return IRQ_HANDLED;
 }
@@ -644,7 +644,7 @@ static int ohci_hcd_at91_drv_probe(struct platform_device *pdev)
 
 	if (!gpiod_get_value(pdata->id_pin)) {
 		/* If ID pin is pulled down, power on VBUS */
-		gpiod_direction_output(pdata->vbus_pin[0], 1);
+		dev_info(&pdev->dev, "%s: ID pin is pulled down, power on VBUS\n", __func__);
 	}
 	at91_for_each_port(i) {
 		if (i >= pdata->ports)
