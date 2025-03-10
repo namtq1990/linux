@@ -52,6 +52,7 @@ static const struct of_device_id at91_ohci_dt_ids[];
 struct at91_usbh_data {
 	struct gpio_desc *vbus_pin[AT91_MAX_USBH_PORTS];
 	struct gpio_desc *id_pin;
+	struct regulator* vbus_regulator;
 	struct gpio_desc *overcurrent_pin[AT91_MAX_USBH_PORTS];
 	u8 ports;				/* number of ports on root hub */
 	u8 overcurrent_supported;
@@ -571,26 +572,51 @@ static const struct of_device_id at91_ohci_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, at91_ohci_dt_ids);
 
 /*-------------------------------------------------------------------------*/
-static irqreturn_t ohci_at91_otg_irq(int irq, void *data)
+static irqreturn_t ohci_at91_otg_irq_thread(int irq, void *data)
 {
-	struct platform_device *pdev = data;
-	struct at91_usbh_data	*pdata;
+	struct platform_device *pdev = data;	
+	struct at91_usbh_data *pdata;
+	int regulator_en;
+	int ret = 0;
+
+	if (!pdev) {
+		pr_err("Invalid platform device\n");
+		return IRQ_NONE;
+	}
 
 	pdata = dev_get_platdata(&pdev->dev);
-	dev_info(&pdev->dev, "%s\n", __func__);
+	if (!pdata ) {
+		pr_err("No platform data or regulator\n");
+		return IRQ_NONE;
+	}
 
-	/* debounce */
-	mdelay(10);
+	if (pdata->vbus_regulator) {
+		regulator_en = regulator_is_enabled(pdata->vbus_regulator);
+	}
 	// With HH300, Vbus voltage is controlled by STM32MCU.
 	if (gpiod_get_value(pdata->id_pin)) {
 		/* If ID pin is float, power off VBUS */
-		dev_info(&pdev->dev, "ID pin is float, power off VBUS\n");
+		pr_info("ID pin is float, power off VBUS\n");
+		if (pdata->vbus_regulator && regulator_en) {
+			ret = regulator_disable(pdata->vbus_regulator);
+		}
 	} else {
 		/* If ID pin is pulled down, power on VBUS */
-		dev_info(&pdev->dev, "ID pin is pulled down, power on VBUS\n");
-
+		pr_info("ID pin is pulled down, power on VBUS\n");
+		if (pdata->vbus_regulator && (!regulator_en)) {
+			ret = regulator_enable(pdata->vbus_regulator);
+		}
+	}
+	if (ret) {
+		pr_err("Failed to enable/disable regulator: %d\n", ret);
 	}
 	return IRQ_HANDLED;
+}
+
+
+static irqreturn_t ohci_at91_otg_irq(int irq, void *data) {
+	/* This is the top-half IRQ handler; it just acknowledges the interrupt */
+	return IRQ_WAKE_THREAD;  // Wake up the threaded handler
 }
 
 static int ohci_hcd_at91_drv_probe(struct platform_device *pdev)
@@ -601,6 +627,7 @@ static int ohci_hcd_at91_drv_probe(struct platform_device *pdev)
 	int			ret;
 	int			err;
 	u32			ports;
+	int 		id_pin;
 
 	/* Right now device-tree probed devices don't get dma_mask set.
 	 * Since shared usb code relies on it, set it here for now.
@@ -632,7 +659,8 @@ static int ohci_hcd_at91_drv_probe(struct platform_device *pdev)
 			continue;
 		}
 	}
-	int id_pin = of_get_named_gpio_flags(pdev->dev.of_node, "atmel,id-gpio", 0, NULL);
+
+	id_pin = of_get_named_gpio_flags(pdev->dev.of_node, "atmel,id-gpio", 0, NULL);
 	dev_info(&pdev->dev, "ohci_hcd_at91_drv_probe: atmel,id-gpio: %d", id_pin);
 
 	pdata->id_pin = gpio_to_desc(id_pin);
@@ -640,12 +668,39 @@ static int ohci_hcd_at91_drv_probe(struct platform_device *pdev)
 		err = PTR_ERR(pdata->id_pin);
 		dev_err(&pdev->dev, "unable to claim gpio \"id\": %d\n", err);
 	}
-	ret = devm_request_irq(&pdev->dev, gpiod_to_irq(pdata->id_pin), ohci_at91_otg_irq, 0, "otg_irq", pdev);
+	pdata->vbus_regulator = devm_regulator_get_optional(&pdev->dev, "vbus");
+	if (IS_ERR(pdata->vbus_regulator)) {
+		err = PTR_ERR(pdata->vbus_regulator);
+		if (err == -ENODEV)
+		{
+			pdata->vbus_regulator = 0;
+			dev_err(&pdev->dev, "Not found regulator in DT \"vbus\": %d\n", err);
+		}
+		else
+		{
+			dev_err(&pdev->dev, "unable to claim regulator \"vbus\": %d\n", err);
+		}
+	}
+	dev_info(&pdev->dev, "ohci_hcd_at91_drv_probe: pdata->vbus_regulator: %px\n", pdata->vbus_regulator);
+
+	ret = devm_request_threaded_irq(&pdev->dev, gpiod_to_irq(pdata->id_pin),
+		ohci_at91_otg_irq, // Top-half: quick acknowledgment
+		ohci_at91_otg_irq_thread, // Bottom-half: runs in process context
+		IRQF_ONESHOT | IRQF_SHARED, // Ensure only one instance runs
+		"ohci_at91", pdev);
 
 	if (!gpiod_get_value(pdata->id_pin)) {
-		/* If ID pin is pulled down, power on VBUS */
 		dev_info(&pdev->dev, "%s: ID pin is pulled down, power on VBUS\n", __func__);
+		/* If ID pin is pulled down, power on VBUS */
+		if (pdata->vbus_regulator ) {
+			if (!regulator_is_enabled(pdata->vbus_regulator)) {
+				if (regulator_enable(pdata->vbus_regulator)) {
+					dev_err(&pdev->dev, "%s: Failed to enable regulator\n",__func__);
+				}
+			}
+		}
 	}
+
 	at91_for_each_port(i) {
 		if (i >= pdata->ports)
 			break;
