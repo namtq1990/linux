@@ -2187,6 +2187,8 @@ static struct usba_ep * atmel_udc_of_init(struct platform_device *pdev,
 	int i, ret;
 	struct usba_ep *eps, *ep;
 	const struct usba_udc_config *udc_config;
+	int vbus_pin;
+	int id_pin;
 
 	match = of_match_node(atmel_udc_dt_ids, np);
 	if (!match)
@@ -2212,9 +2214,9 @@ static struct usba_ep * atmel_udc_of_init(struct platform_device *pdev,
 	udc->num_ep = 0;
 
 	dev_info(&pdev->dev, "pre vbus");
-	int vbus_pin = of_get_named_gpio_flags(pdev->dev.of_node, "atmel,vbus-gpio", 0, NULL);
+	vbus_pin = of_get_named_gpio_flags(pdev->dev.of_node, "atmel,vbus-gpio", 0, NULL);
 	dev_info(&pdev->dev, "pre id, vbus: %d", vbus_pin);
-	int id_pin = of_get_named_gpio_flags(pdev->dev.of_node, "atmel,id-gpio", 0, NULL);
+	id_pin = of_get_named_gpio_flags(pdev->dev.of_node, "atmel,id-gpio", 0, NULL);
 	dev_info(&pdev->dev, "pre id pin: %d, vbus: %d", id_pin, vbus_pin);
 	udc->vbus_pin = gpio_to_desc(vbus_pin);
 	udc->id_pin = gpio_to_desc(id_pin);
