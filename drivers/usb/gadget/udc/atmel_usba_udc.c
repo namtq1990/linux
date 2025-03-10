@@ -1960,13 +1960,13 @@ static irqreturn_t usba_vbus_irq_thread(int irq, void *devid)
 		//FIXME: Should return?
 		// return IRQ_HANDLED;
 	}
-	dev_info(&udc->pdev->dev, "USB Client activated");
 
 	mutex_lock(&udc->vbus_mutex);
 	/* Only when VBUS is powered on and ID pin is float, configure USB to device */
 	vbus = vbus_is_present(udc);
 	if (vbus != udc->vbus_prev) {
 		if (vbus) {
+			dev_info(&udc->pdev->dev, "USB Client activated");
 			phy_set_mode_ext(udc->phy, PHY_MODE_USB_DEVICE, 1);
 			usba_start(udc);
 		} else {

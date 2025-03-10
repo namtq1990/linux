@@ -43,9 +43,6 @@ struct atmel_ehci_priv {
 	struct clk *uclk;
 	bool clocked;
 
-	struct gpio_desc* vbus_pin;
-	struct gpio_desc* id_pin;
-	struct regulator* vbus_regulator;
 };
 
 static struct hc_driver __read_mostly ehci_atmel_hc_driver;
