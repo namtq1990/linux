@@ -23,7 +23,7 @@
 #include <linux/usb/gadget.h>
 #include <linux/delay.h>
 #include <linux/of.h>
-#include <linux/of_gpio.h>>
+#include <linux/of_gpio.h>
 #include <linux/irq.h>
 #include <linux/gpio/consumer.h>
 
@@ -386,14 +386,6 @@ static int vbus_is_present(struct usba_udc *udc)
 
 	/* No Vbus detection: Assume always present */
 	return 1;
-}
-
-static int id_is_present(struct usba_udc *udc) 
-{
-	if (udc->id_pin)
-		return !gpiod_get_value(udc->id_pin);
-	
-	return 0;
 }
 
 static void toggle_bias(struct usba_udc *udc, int is_on)
@@ -1954,28 +1946,27 @@ static irqreturn_t usba_vbus_irq_thread(int irq, void *devid)
 
 	/* debounce */
 	udelay(10);
-	int ret;
 
-	ret = id_is_present(udc);
-	if (ret) {
-		dev_info(&udc->pdev->dev, "usba_vbus_irq_thread id_pin change value: %d", ret);
+	dev_info(&udc->pdev->dev, "usba_vbus_irq_thread vbus_pin_cur: %d, vbus_pre:%d\n", gpiod_get_value(udc->vbus_pin),udc->vbus_prev);
+
+	if (!gpiod_get_value(udc->id_pin)) {
+		dev_info(&udc->pdev->dev, "USB Client deactivated");
 		udc->id_prev = 0;
 		usba_writel(udc, CTRL, USBA_DISABLE_MASK);
 		return IRQ_HANDLED;
 	}
-	if (udc->id_prev != ret) {
-		dev_info(&udc->pdev->dev, "usba_vbus_irq_thread id_prev != id_pin: %d", udc->id_prev);
+	if (udc->id_prev != gpiod_get_value(udc->id_pin)) {
 		udc->id_prev = 1;
+		//FIXME: Should return?
 		// return IRQ_HANDLED;
 	}
 
-	dev_info(&udc->pdev->dev, "USB Client activated");
-
 	mutex_lock(&udc->vbus_mutex);
-
+	/* Only when VBUS is powered on and ID pin is float, configure USB to device */
 	vbus = vbus_is_present(udc);
 	if (vbus != udc->vbus_prev) {
 		if (vbus) {
+			dev_info(&udc->pdev->dev, "USB Client activated");
 			phy_set_mode_ext(udc->phy, PHY_MODE_USB_DEVICE, 1);
 			usba_start(udc);
 		} else {
@@ -2029,7 +2020,7 @@ static int atmel_usba_start(struct usb_gadget *gadget,
 		enable_irq(gpiod_to_irq(udc->vbus_pin));
 
 	/* If Vbus is present, enable the controller and wait for reset */
-	udc->vbus_prev = vbus_is_present(udc) && !id_is_present(udc);
+	udc->vbus_prev = (vbus_is_present(udc) && gpiod_get_value(udc->id_pin));
 	if (udc->vbus_prev) {
 		phy_set_mode_ext(udc->phy, PHY_MODE_USB_DEVICE, 1);
 		ret = usba_start(udc);
@@ -2196,6 +2187,8 @@ static struct usba_ep * atmel_udc_of_init(struct platform_device *pdev,
 	int i, ret;
 	struct usba_ep *eps, *ep;
 	const struct usba_udc_config *udc_config;
+	int vbus_pin;
+	int id_pin;
 
 	match = of_match_node(atmel_udc_dt_ids, np);
 	if (!match)
@@ -2220,14 +2213,10 @@ static struct usba_ep * atmel_udc_of_init(struct platform_device *pdev,
 
 	udc->num_ep = 0;
 
-	// udc->vbus_pin = devm_gpiod_get_optional(&pdev->dev, "atmel,vbus",
-	// 					GPIOD_IN);
-	// udc->id_pin = devm_gpiod_get_optional(&pdev->dev, "atmel,id",
-	// 					GPIOD_IN);
 	dev_info(&pdev->dev, "pre vbus");
-	int vbus_pin = of_get_named_gpio_flags(pdev->dev.of_node, "atmel,vbus-gpio", 0, NULL);
+	vbus_pin = of_get_named_gpio_flags(pdev->dev.of_node, "atmel,vbus-gpio", 0, NULL);
 	dev_info(&pdev->dev, "pre id, vbus: %d", vbus_pin);
-	int id_pin = of_get_named_gpio_flags(pdev->dev.of_node, "atmel,id-gpio", 0, NULL);
+	id_pin = of_get_named_gpio_flags(pdev->dev.of_node, "atmel,id-gpio", 0, NULL);
 	dev_info(&pdev->dev, "pre id pin: %d, vbus: %d", id_pin, vbus_pin);
 	udc->vbus_pin = gpio_to_desc(vbus_pin);
 	udc->id_pin = gpio_to_desc(id_pin);
