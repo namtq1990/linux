@@ -937,7 +937,7 @@ static struct bq27xxx_dm_reg bq27426_dm_regs[] = {
 #if 0 /* not yet tested */
 #define bq27441_dm_regs bq27421_dm_regs
 #else
-#define bq27441_dm_regs 0
+#define bq27441_dm_regs bq27421_dm_regs
 #endif
 
 #if 0 /* not yet tested */

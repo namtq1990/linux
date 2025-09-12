@@ -353,10 +353,23 @@
 		pinctrl-0 = <&pinctrl_flx10_default>;
 		status = "okay";
 
-		bat: battery@55 {
+		bat: battery {
+			compatible = "simple-battery";
+			precharge-current-microamp = <150000>;
+			charge-term-current-microamp = <150000>;
+			constant-charge-current-max-microamp = <2000000>;
+			constant-charge-voltage-max-microvolt = <4200000>;
+
+			voltage-max-design-microvolt = <4200000>;
+			voltage-min-design-microvolt = <2800000>;
+        	energy-full-design-microwatt-hours = <12060000>;
+        	charge-full-design-microamp-hours = <3350000>;
+    	};
+
+		fuel: fuel@55 {
 			compatible = "ti,bq27441";
 			reg = <0x55>;
-			power-supplies = <&bq24196>;
+			monitored-battery = <&bat>;
 		};
 
 		bq24196: charger@6b {
